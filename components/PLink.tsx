@@ -38,6 +38,10 @@ function formatMonthLabel(monthKey: string) {
 }
 
 function getTransactionCategory(transaction: any) {
+  if (typeof transaction.category === 'string' && transaction.category.length > 0) {
+    return transaction.category;
+  }
+
   if (Array.isArray(transaction.category) && transaction.category.length > 0) {
     return transaction.category[0];
   }
@@ -58,7 +62,7 @@ function chartValueFormatter(value: any) {
 
 const PLink: NextPage<PLinkProps> = ({}) => {
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [connections, setConnections] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
   const [isLinked, setIsLinked] = useState(false);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
@@ -128,7 +132,7 @@ const PLink: NextPage<PLinkProps> = ({}) => {
         }
       });
 
-    fetchTransactions(true);
+    loadDashboard(true);
   }, []);
 
   useEffect(() => {
@@ -143,39 +147,101 @@ const PLink: NextPage<PLinkProps> = ({}) => {
     }
 
     const intervalId = window.setInterval(() => {
-      fetchTransactions(true);
+      runSync(true);
     }, 5 * 60 * 1000);
 
     return () => window.clearInterval(intervalId);
   }, [isLinked]);
 
-  function fetchTransactions(silent = false) {
+  function updateLastUpdated(nextAccounts: any[]) {
+    const syncedAtValues = nextAccounts
+      .map((account) => account.last_synced_at)
+      .filter(Boolean)
+      .sort((a, b) => (a < b ? 1 : -1));
+
+    setLastUpdated(syncedAtValues[0] || null);
+  }
+
+  async function loadAccounts() {
+    const response = await fetch('/api/accounts');
+    const res = await response.json();
+
+    if (res.ok === false) {
+      return [];
+    }
+
+    const nextAccounts = res.accounts || [];
+    setAccounts(nextAccounts);
+    setIsLinked(nextAccounts.length > 0);
+    updateLastUpdated(nextAccounts);
+    return nextAccounts;
+  }
+
+  async function loadTransactions() {
+    const response = await fetch('/api/transactions');
+    const res = await response.json();
+
+    if (res.ok === false) {
+      setTransactionsMessage(res.message || 'Unable to load transactions.');
+      return [];
+    }
+
+    const nextTransactions = res.transactions || [];
+    setTransactions(nextTransactions);
+    setTransactionsMessage(
+      nextTransactions.length > 0
+        ? 'Recent transactions loaded.'
+        : 'No transactions synced yet. Run a sync to load your latest activity.'
+    );
+    return nextTransactions;
+  }
+
+  async function loadDashboard(silent = false) {
+    if (!silent) {
+      setIsLoadingTransactions(true);
+    }
+
+    try {
+      const nextAccounts = await loadAccounts();
+
+      if (nextAccounts.length > 0) {
+        await loadTransactions();
+      } else {
+        setTransactions([]);
+        setTransactionsMessage('Connect an account to load the last 30 days of transactions.');
+      }
+    } finally {
+      if (!silent) {
+        setIsLoadingTransactions(false);
+      }
+    }
+  }
+
+  async function runSync(silent = false) {
     setIsLoadingTransactions(true);
 
-    fetch('/api/transactions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    })
-      .then((response) => response.json())
-      .then((res) => {
-        if (res.ok !== false) {
-          setTransactions(res.transactions || []);
-          setConnections(res.connections || []);
-          setIsLinked((res.connections || []).length > 0);
-          setLastUpdated(res.last_updated || null);
-          setTransactionsMessage(
-            res.pending
-              ? 'Your transactions are being loaded, check back in a few minutes'
-              : (res.connections || []).length > 0
-                ? 'Recent transactions loaded.'
-                : 'Connect an account to load the last 30 days of transactions.'
-          );
-        }
-      })
-      .finally(() => setIsLoadingTransactions(false));
+    try {
+      const response = await fetch('/api/sync', {
+        method: 'POST',
+      });
+      const res = await response.json();
+
+      if (res.ok === false) {
+        setTransactionsMessage(res.message || 'Unable to sync transactions.');
+        return;
+      }
+
+      const nextAccounts = await loadAccounts();
+      await loadTransactions();
+
+      if (!silent) {
+        setTransactionsMessage(
+          `Sync complete. ${res.accounts_synced || nextAccounts.length} accounts refreshed.`
+        );
+      }
+    } finally {
+      setIsLoadingTransactions(false);
+    }
   }
 
   function handleOnSuccess(public_token: string, metadata: any) {
@@ -186,9 +252,10 @@ const PLink: NextPage<PLinkProps> = ({}) => {
       })
       .then((res) => {
         if (res.ok !== false) {
-          setConnections(res.connections || []);
+          setAccounts(res.accounts || []);
           setIsLinked(true);
-          fetchTransactions();
+          updateLastUpdated(res.accounts || []);
+          runSync();
         }
       });
   }
@@ -230,7 +297,7 @@ const PLink: NextPage<PLinkProps> = ({}) => {
                 Connected Accounts
               </p>
               <h3 className="mt-0 mb-2 text-2xl font-semibold">
-                {connections.length} linked {connections.length === 1 ? 'account group' : 'account groups'}
+                {accounts.length} linked {accounts.length === 1 ? 'account' : 'accounts'}
               </h3>
               <p className="mb-0 text-base text-gray-600 dark:text-neutral-300">
                 Add multiple banks and cards to see one combined budget view.
@@ -242,38 +309,42 @@ const PLink: NextPage<PLinkProps> = ({}) => {
                 disabled={!ready}
                 className="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-5 rounded-lg"
               >
-                {connections.length > 0 ? 'Add another bank or card' : 'Connect your bank'}
+                {accounts.length > 0 ? 'Add another bank or card' : 'Connect your bank'}
               </button>
               <button 
-                onClick={() => fetchTransactions()}
+                onClick={() => runSync()}
                 disabled={!isLinked || isLoadingTransactions}
                 className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg"
               >
-                {isLoadingTransactions ? 'Refreshing...' : 'Refresh Transactions'}
+                {isLoadingTransactions ? 'Syncing...' : 'Refresh Transactions'}
               </button>
             </div>
           </div>
           <div className="mt-6 grid gap-3 md:grid-cols-2">
-            {connections.length === 0 ? (
+            {accounts.length === 0 ? (
               <div className="rounded-xl border border-dashed border-gray-300 dark:border-neutral-600 p-4">
                 <p className="mb-0 text-base text-gray-600 dark:text-neutral-300">
                   No accounts connected yet.
                 </p>
               </div>
             ) : (
-              connections.map((connection) => (
+              accounts.map((account) => (
                 <div
-                  key={connection.item_id}
+                  key={account.id}
                   className="rounded-xl border border-gray-200 dark:border-neutral-700 p-4"
                 >
-                  <div className="font-semibold text-lg">{connection.institution_name}</div>
+                  <div className="font-semibold text-lg">{account.institution_name}</div>
                   <div className="mt-2 space-y-1 text-sm text-gray-600 dark:text-neutral-300">
-                    {(connection.accounts || []).map((account: any) => (
-                      <div key={account.id}>
-                        {account.name}
-                        {account.mask ? ` •••• ${account.mask}` : ''}
-                      </div>
-                    ))}
+                    <div>
+                      {account.account_name}
+                      {account.mask ? ` •••• ${account.mask}` : ''}
+                    </div>
+                    <div className="capitalize">
+                      {account.account_type} {account.account_subtype ? `· ${account.account_subtype}` : ''}
+                    </div>
+                    <div>
+                      Current: {currencyFormatter(Number(account.current_balance || 0))}
+                    </div>
                   </div>
                 </div>
               ))
@@ -416,14 +487,14 @@ const PLink: NextPage<PLinkProps> = ({}) => {
             <ul className="space-y-3">
               {monthTransactions.slice(0, 12).map((transaction) => (
                 <li
-                  key={`${transaction.transaction_id}-${transaction.connection_item_id}`}
+                  key={transaction.id}
                   className="border border-gray-200 dark:border-neutral-700 rounded-xl px-4 py-3"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="font-semibold">{transaction.name}</div>
                       <div className="text-sm text-gray-600 dark:text-neutral-300">
-                        {transaction.institution_name} · {getTransactionCategory(transaction)} · {transaction.date}
+                        {transaction.accounts?.institution_name || 'Connected account'} · {getTransactionCategory(transaction)} · {transaction.date}
                       </div>
                     </div>
                     <div className="font-semibold">

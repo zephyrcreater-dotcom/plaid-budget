@@ -14,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@fullhuman/postcss-purgecss": "^2.0.6",
+    "@supabase/supabase-js": "^1.35.7",
     "@zeit/next-css": "^1.0.1",
     "autoprefixer": "^9.7.4",
     "cssnano": "^4.1.10",

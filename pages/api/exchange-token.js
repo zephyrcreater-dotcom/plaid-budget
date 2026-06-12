@@ -1,11 +1,7 @@
 import nextConnect from 'next-connect';
+import { DEFAULT_USER_ID } from '../../lib/categories';
 import { plaidClient, getPlaidError } from '../../lib/plaid';
-import {
-  buildPlaidSession,
-  getPlaidConnectionsFromCookie,
-  sanitizePlaidConnections,
-  setPlaidSessionCookie,
-} from '../../lib/plaid-session';
+import { ensureSupabaseAdminEnv, supabaseAdmin } from '../../lib/supabaseAdmin';
 
 const handler = nextConnect();
 
@@ -21,37 +17,64 @@ handler.post(async (req, res) => {
   }
 
   try {
+    ensureSupabaseAdminEnv();
     const response = await plaidClient.itemPublicTokenExchange({ public_token });
     const accountsResponse = await plaidClient.accountsGet({
       access_token: response.data.access_token,
     });
-    const existingConnections = getPlaidConnectionsFromCookie(req);
-    const nextConnection = {
-      access_token: response.data.access_token,
-      item_id: response.data.item_id,
-      institution_name: metadata?.institution?.name || 'Connected account',
-      accounts: accountsResponse.data.accounts.map((account) => ({
-        id: account.account_id,
-        name: account.name,
-        mask: account.mask,
-        subtype: account.subtype,
-        type: account.type,
-      })),
-    };
-    const nextConnections = [
-      ...existingConnections.filter(
-        (connection) => connection.item_id !== nextConnection.item_id
-      ),
-      nextConnection,
-    ];
+    const plaidAccounts = accountsResponse.data.accounts || [];
+    const { data: existingAccounts, error: existingAccountsError } = await supabaseAdmin
+      .from('accounts')
+      .select('id, plaid_account_id')
+      .eq('user_id', DEFAULT_USER_ID)
+      .in('plaid_account_id', plaidAccounts.map((account) => account.account_id));
 
-    setPlaidSessionCookie(res, buildPlaidSession(nextConnections));
+    if (existingAccountsError) {
+      throw existingAccountsError;
+    }
+
+    const existingAccountsByPlaidId = (existingAccounts || []).reduce((accumulator, account) => {
+      accumulator[account.plaid_account_id] = account;
+      return accumulator;
+    }, {});
+    const savedRows = [];
+
+    for (const account of plaidAccounts) {
+      const payload = {
+        user_id: DEFAULT_USER_ID,
+        institution_name: metadata?.institution?.name || 'Connected account',
+        institution_id: metadata?.institution?.institution_id || null,
+        access_token: response.data.access_token,
+        item_id: response.data.item_id,
+        account_type: account.type || null,
+        account_subtype: account.subtype || null,
+        account_name: account.name || null,
+        mask: account.mask || null,
+        plaid_account_id: account.account_id,
+        current_balance: account.balances?.current ?? null,
+        available_balance: account.balances?.available ?? null,
+      };
+
+      const existingAccount = existingAccountsByPlaidId[account.account_id];
+      const query = existingAccount
+        ? supabaseAdmin.from('accounts').update(payload).eq('id', existingAccount.id).select('id, user_id, institution_name, institution_id, item_id, account_type, account_subtype, account_name, mask, plaid_account_id, current_balance, available_balance, created_at, last_synced_at')
+        : supabaseAdmin.from('accounts').insert(payload).select('id, user_id, institution_name, institution_id, item_id, account_type, account_subtype, account_name, mask, plaid_account_id, current_balance, available_balance, created_at, last_synced_at');
+      const { data, error } = await query;
+
+      if (error) {
+        throw error;
+      }
+
+      if (data && data[0]) {
+        savedRows.push(data[0]);
+      }
+    }
 
     return res.json({
       ok: true,
       message: 'Exchanged public token.',
       item_id: response.data.item_id,
-      connections: sanitizePlaidConnections(nextConnections),
+      accounts: savedRows,
     });
   } catch (error) {
     console.error(
