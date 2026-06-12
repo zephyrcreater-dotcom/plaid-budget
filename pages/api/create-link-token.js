@@ -14,8 +14,6 @@ handler.post(async (req, res) => {
   });
 
   try {
-    const baseUrl = process.env.BASE_URL?.replace('http://', 'https://');
-    const isSandbox = plaidEnv === 'sandbox';
     const userId =
       req.body?.userId ||
       req.body?.userEmail ||
@@ -30,10 +28,6 @@ handler.post(async (req, res) => {
         client_user_id: String(userId),
       },
     };
-
-    if (baseUrl && !isSandbox) {
-      request.redirect_uri = baseUrl;
-    }
 
     const response = await plaidClient.linkTokenCreate(request);
 
