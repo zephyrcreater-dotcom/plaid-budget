@@ -1,5 +1,3 @@
-export const DEFAULT_USER_ID = 'nathaniel';
-
 export const CATEGORY_NAMES = [
   'Food & Dining',
   'Golf & Sports',

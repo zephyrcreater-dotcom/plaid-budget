@@ -27,7 +27,7 @@ handler.post(async (req, res) => {
     const { data: existingAccounts, error: existingAccountsError } = await supabaseAdmin
       .from('accounts')
       .select('id, plaid_account_id')
-      .eq('user_id', DEFAULT_USER_ID)
+      .eq('user_id', user.id)
       .in('plaid_account_id', plaidAccounts.map((account) => account.account_id));
 
     if (existingAccountsError) {
