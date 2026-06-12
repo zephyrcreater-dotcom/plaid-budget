@@ -1,6 +1,6 @@
 import nextConnect from 'next-connect';
 import { plaidClient, getPlaidError } from '../../lib/plaid';
-import { getPlaidSessionAccessToken, getPlaidSessionId } from '../../lib/plaid-session';
+import { getPlaidAccessTokenFromCookie } from '../../lib/plaid-session';
 
 function formatDate(date) {
   return date.toISOString().slice(0, 10);
@@ -10,14 +10,13 @@ const handler = nextConnect();
 
 handler.post(async (req, res) => {
   const { access_token: requestAccessToken } = req.body;
-  const sessionId = getPlaidSessionId(req);
-  const access_token =
-    requestAccessToken || getPlaidSessionAccessToken(sessionId);
+  const cookieAccessToken = getPlaidAccessTokenFromCookie(req);
+  const access_token = requestAccessToken || cookieAccessToken;
 
   if (!access_token) {
     return res.status(400).json({
       ok: false,
-      message: 'Missing access token or Plaid session.',
+      message: 'Missing access token or Plaid cookie.',
     });
   }
 
@@ -46,6 +45,10 @@ handler.post(async (req, res) => {
       transactions: response.data.transactions,
     });
   } catch (error) {
+    console.error(
+      'transactions error:',
+      error.response?.data || error.message || error
+    );
     return res.status(500).json(getPlaidError(error));
   }
 });

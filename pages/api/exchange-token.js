@@ -1,6 +1,6 @@
 import nextConnect from 'next-connect';
 import { plaidClient, getPlaidError } from '../../lib/plaid';
-import { createPlaidSession, setPlaidSessionCookie } from '../../lib/plaid-session';
+import { setPlaidAccessTokenCookie } from '../../lib/plaid-session';
 
 const handler = nextConnect();
 
@@ -17,9 +17,8 @@ handler.post(async (req, res) => {
 
   try {
     const response = await plaidClient.itemPublicTokenExchange({ public_token });
-    const sessionId = createPlaidSession(response.data.access_token);
 
-    setPlaidSessionCookie(res, sessionId);
+    setPlaidAccessTokenCookie(res, response.data.access_token);
 
     return res.json({
       ok: true,
