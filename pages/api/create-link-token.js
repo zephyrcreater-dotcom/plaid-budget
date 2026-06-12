@@ -5,15 +5,17 @@ import { plaidClient, getPlaidError } from '../../lib/plaid';
 const handler = nextConnect();
 
 handler.post(async (req, res) => {
+  const plaidEnv = (process.env.PLAID_ENV || 'sandbox').toLowerCase();
+
   console.log('ENV CHECK:', {
     client_id: process.env.PLAID_CLIENT_ID ? 'set' : 'missing',
     secret: process.env.PLAID_SECRET ? 'set' : 'missing',
-    env: process.env.PLAID_ENV,
+    env: plaidEnv,
   });
 
   try {
-    const baseUrl = process.env.BASE_URL;
-    const isSandbox = (process.env.PLAID_ENV || 'sandbox') === 'sandbox';
+    const baseUrl = process.env.BASE_URL?.replace('http://', 'https://');
+    const isSandbox = plaidEnv === 'sandbox';
     const userId =
       req.body?.userId ||
       req.body?.userEmail ||
