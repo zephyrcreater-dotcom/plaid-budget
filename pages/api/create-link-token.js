@@ -1,5 +1,6 @@
 import nextConnect from 'next-connect';
 import { CountryCode } from 'plaid';
+import { getUserFromRequest, respondUnauthorized } from '../../lib/auth';
 import { plaidClient, getPlaidError } from '../../lib/plaid';
 
 const handler = nextConnect();
@@ -14,6 +15,7 @@ handler.post(async (req, res) => {
   });
 
   try {
+    await getUserFromRequest(req);
     const userId =
       req.body?.userId ||
       req.body?.userEmail ||
@@ -46,6 +48,9 @@ handler.post(async (req, res) => {
       expiration: response.data.expiration,
     });
   } catch (error) {
+    if (error.statusCode === 401) {
+      return respondUnauthorized(res);
+    }
     console.error('Plaid error:', error.response?.data || error.message || error);
     res.status(500).json({ error: error.response?.data || error.message });
   }

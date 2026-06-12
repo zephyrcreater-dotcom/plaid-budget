@@ -1,5 +1,5 @@
 import nextConnect from 'next-connect';
-import { DEFAULT_USER_ID } from '../../lib/categories';
+import { getUserFromRequest, respondUnauthorized } from '../../lib/auth';
 import { plaidClient, getPlaidError } from '../../lib/plaid';
 import { ensureSupabaseAdminEnv, supabaseAdmin } from '../../lib/supabaseAdmin';
 
@@ -17,6 +17,7 @@ handler.post(async (req, res) => {
   }
 
   try {
+    const user = await getUserFromRequest(req);
     ensureSupabaseAdminEnv();
     const response = await plaidClient.itemPublicTokenExchange({ public_token });
     const accountsResponse = await plaidClient.accountsGet({
@@ -41,7 +42,7 @@ handler.post(async (req, res) => {
 
     for (const account of plaidAccounts) {
       const payload = {
-        user_id: DEFAULT_USER_ID,
+        user_id: user.id,
         institution_name: metadata?.institution?.name || 'Connected account',
         institution_id: metadata?.institution?.institution_id || null,
         access_token: response.data.access_token,
@@ -77,6 +78,9 @@ handler.post(async (req, res) => {
       accounts: savedRows,
     });
   } catch (error) {
+    if (error.statusCode === 401) {
+      return respondUnauthorized(res);
+    }
     console.error(
       'exchange-token error:',
       error.response?.data || error.message || error

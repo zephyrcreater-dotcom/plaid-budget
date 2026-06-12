@@ -1,5 +1,6 @@
 import nextConnect from 'next-connect';
-import { DEFAULT_USER_ID, detectIncome, detectTransfer, mapPlaidCategoryToCustomCategory } from '../../lib/categories';
+import { detectIncome, detectTransfer, mapPlaidCategoryToCustomCategory } from '../../lib/categories';
+import { getUserFromRequest, respondUnauthorized } from '../../lib/auth';
 import { plaidClient, getPlaidError } from '../../lib/plaid';
 import { ensureSupabaseAdminEnv, supabaseAdmin } from '../../lib/supabaseAdmin';
 
@@ -116,11 +117,12 @@ const handler = nextConnect();
 
 async function handleSync(_req, res) {
   try {
+    const user = await getUserFromRequest(_req);
     ensureSupabaseAdminEnv();
     const { data: accounts, error: accountsError } = await supabaseAdmin
       .from('accounts')
       .select('*')
-      .eq('user_id', DEFAULT_USER_ID);
+      .eq('user_id', user.id);
 
     if (accountsError) {
       throw accountsError;
@@ -179,6 +181,9 @@ async function handleSync(_req, res) {
       transactions_upserted: transactionsUpserted,
     });
   } catch (error) {
+    if (error.statusCode === 401) {
+      return respondUnauthorized(res);
+    }
     console.error('sync error:', error);
     return res.status(500).json(getPlaidError(error));
   }

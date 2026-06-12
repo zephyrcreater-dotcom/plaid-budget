@@ -1,17 +1,18 @@
 import nextConnect from 'next-connect';
-import { DEFAULT_USER_ID } from '../../lib/categories';
+import { getUserFromRequest, respondUnauthorized } from '../../lib/auth';
 import { ensureSupabaseAdminEnv, supabaseAdmin } from '../../lib/supabaseAdmin';
 
 const handler = nextConnect();
 
 handler.get(async (req, res) => {
   try {
+    const user = await getUserFromRequest(req);
     ensureSupabaseAdminEnv();
     const { month, category, accountId, search } = req.query;
     let query = supabaseAdmin
       .from('transactions')
       .select('id, date, name, amount, category, plaid_category, is_transfer, is_income, pending, created_at, account_id, accounts!inner(id, institution_name, account_name, account_type, account_subtype, mask, plaid_account_id)')
-      .eq('accounts.user_id', DEFAULT_USER_ID)
+      .eq('accounts.user_id', user.id)
       .order('date', { ascending: false });
 
     if (typeof month === 'string' && /^\d{4}-\d{2}$/.test(month)) {
@@ -44,6 +45,9 @@ handler.get(async (req, res) => {
       transactions: data || [],
     });
   } catch (error) {
+    if (error.statusCode === 401) {
+      return respondUnauthorized(res);
+    }
     console.error(
       'transactions error:',
       error.message || error

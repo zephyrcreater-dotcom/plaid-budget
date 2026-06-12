@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { useAuth } from '../lib/authContext';
 import fetchSwal from '../lib/fetchSwal';
 
 interface PLinkProps {
@@ -61,6 +62,7 @@ function chartValueFormatter(value: any) {
 }
 
 const PLink: NextPage<PLinkProps> = ({}) => {
+  const { session } = useAuth();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [isLinked, setIsLinked] = useState(false);
@@ -117,11 +119,28 @@ const PLink: NextPage<PLinkProps> = ({}) => {
       })()
     : 0;
 
+  function getAccessToken() {
+    return session?.access_token || '';
+  }
+
+  function getAuthHeaders() {
+    const accessToken = getAccessToken();
+
+    return {
+      Authorization: `Bearer ${accessToken}`,
+    };
+  }
+
   useEffect(() => {
+    if (!session) {
+      return;
+    }
+
     fetch('/api/create-link-token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({}),
     })
@@ -133,7 +152,7 @@ const PLink: NextPage<PLinkProps> = ({}) => {
       });
 
     loadDashboard(true);
-  }, []);
+  }, [session]);
 
   useEffect(() => {
     if (availableMonths.length > 0 && !selectedMonth) {
@@ -163,7 +182,9 @@ const PLink: NextPage<PLinkProps> = ({}) => {
   }
 
   async function loadAccounts() {
-    const response = await fetch('/api/accounts');
+    const response = await fetch('/api/accounts', {
+      headers: getAuthHeaders(),
+    });
     const res = await response.json();
 
     if (res.ok === false) {
@@ -178,7 +199,9 @@ const PLink: NextPage<PLinkProps> = ({}) => {
   }
 
   async function loadTransactions() {
-    const response = await fetch('/api/transactions');
+    const response = await fetch('/api/transactions', {
+      headers: getAuthHeaders(),
+    });
     const res = await response.json();
 
     if (res.ok === false) {
@@ -223,6 +246,7 @@ const PLink: NextPage<PLinkProps> = ({}) => {
     try {
       const response = await fetch('/api/sync', {
         method: 'POST',
+        headers: getAuthHeaders(),
       });
       const res = await response.json();
 
@@ -249,6 +273,8 @@ const PLink: NextPage<PLinkProps> = ({}) => {
       .post('/api/exchange-token', {
         public_token,
         metadata,
+      }, {
+        headers: getAuthHeaders(),
       })
       .then((res) => {
         if (res.ok !== false) {

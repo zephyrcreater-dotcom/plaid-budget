@@ -1,7 +1,10 @@
 import { NextPage } from 'next';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import Section from '../components/Section';
-import ThemeToggle from "./ThemeToggle";
+import ThemeToggle from './ThemeToggle';
+import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../lib/authContext';
 
 interface HeaderProps {
   userAgent?: string;
@@ -9,13 +12,21 @@ interface HeaderProps {
 }
 
 const Header: NextPage<HeaderProps> = ({}) => {
+  const router = useRouter();
+  const { user } = useAuth();
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.replace('/login');
+  }
+
   return (
     <header className="hidden lg:block">
       <Section>
         <div className="mt-10">
           <Link href="/">
             <a href="/">
-              <img 
+              <img
                 src=""
                 width="250"
               >
@@ -23,19 +34,14 @@ const Header: NextPage<HeaderProps> = ({}) => {
             </a>
           </Link>
         </div>
-        <div
-          className="flex items-center justify-between pb-6 my-6 border-b-2 border-blue-400">
+        <div className="flex items-center justify-between pb-6 my-6 border-b-2 border-blue-400">
           <nav className="-ml-4">
             {[
               {
-                route: `/`,
-                title: `Dashboard`
+                route: '/',
+                title: 'Dashboard',
               },
-              {
-                route: `/about`,
-                title: `About`
-              }
-            ].map(link => (
+            ].map((link) => (
               <Link key={link.route} href={link.route}>
                 <a
                   className="px-4 py-2 mr-2 text-2xl rounded hover:bg-gray-300 dark-hover:bg-neutral-800"
@@ -47,11 +53,21 @@ const Header: NextPage<HeaderProps> = ({}) => {
               </Link>
             ))}
           </nav>
-          <ThemeToggle />
+          <div className="flex items-center gap-4">
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 text-base font-semibold rounded hover:bg-gray-300 dark-hover:bg-neutral-800"
+              >
+                Logout
+              </button>
+            ) : null}
+            <ThemeToggle />
+          </div>
         </div>
       </Section>
     </header>
-  )
-}
+  );
+};
 
 export default Header;
