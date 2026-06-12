@@ -1,0 +1,43 @@
+import nextConnect from 'next-connect';
+import { CountryCode, Products } from 'plaid';
+import { plaidClient, getPlaidError } from '../../lib/plaid';
+
+const handler = nextConnect();
+
+handler.post(async (req, res) => {
+  try {
+    const baseUrl = process.env.BASE_URL;
+    const isSandbox = (process.env.PLAID_ENV || 'sandbox') === 'sandbox';
+    const userId =
+      req.body?.userId ||
+      req.body?.userEmail ||
+      `user-${Date.now()}`;
+
+    const request = {
+      client_name: 'Next.js Plaid Starter',
+      country_codes: [CountryCode.Us],
+      language: 'en',
+      products: [Products.Auth, Products.Transactions],
+      user: {
+        client_user_id: String(userId),
+      },
+    };
+
+    if (baseUrl && !isSandbox) {
+      request.redirect_uri = baseUrl;
+    }
+
+    const response = await plaidClient.linkTokenCreate(request);
+
+    res.json({
+      ok: true,
+      message: 'Created link token.',
+      link_token: response.data.link_token,
+      expiration: response.data.expiration,
+    });
+  } catch (error) {
+    res.status(500).json(getPlaidError(error));
+  }
+});
+
+export default handler;
