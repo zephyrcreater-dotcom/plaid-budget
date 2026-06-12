@@ -3,7 +3,6 @@ const optimizedImages = require('next-optimized-images');
 const withPlugins = require('next-compose-plugins');
 const { parsed: localEnv } = require('dotenv').config();
 const webpack = require('webpack');
-const sitemap = require('nextjs-sitemap-generator'); 
 
 const path = require("path");
 const glob = require("glob");
