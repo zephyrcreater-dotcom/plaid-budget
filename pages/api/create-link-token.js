@@ -5,6 +5,12 @@ import { plaidClient, getPlaidError } from '../../lib/plaid';
 const handler = nextConnect();
 
 handler.post(async (req, res) => {
+  console.log('ENV CHECK:', {
+    client_id: process.env.PLAID_CLIENT_ID ? 'set' : 'missing',
+    secret: process.env.PLAID_SECRET ? 'set' : 'missing',
+    env: process.env.PLAID_ENV,
+  });
+
   try {
     const baseUrl = process.env.BASE_URL;
     const isSandbox = (process.env.PLAID_ENV || 'sandbox') === 'sandbox';
@@ -36,7 +42,8 @@ handler.post(async (req, res) => {
       expiration: response.data.expiration,
     });
   } catch (error) {
-    res.status(500).json(getPlaidError(error));
+    console.error('Plaid error:', error.response?.data || error.message || error);
+    res.status(500).json({ error: error.response?.data || error.message });
   }
 });
 
