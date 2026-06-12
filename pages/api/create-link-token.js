@@ -1,5 +1,5 @@
 import nextConnect from 'next-connect';
-import { CountryCode, Products } from 'plaid';
+import { CountryCode } from 'plaid';
 import { plaidClient, getPlaidError } from '../../lib/plaid';
 
 const handler = nextConnect();
@@ -23,7 +23,15 @@ handler.post(async (req, res) => {
       client_name: 'Next.js Plaid Starter',
       country_codes: [CountryCode.Us],
       language: 'en',
-      products: [Products.Auth, Products.Transactions],
+      products: ['transactions'],
+      account_filters: {
+        credit: {
+          account_subtypes: ['credit card'],
+        },
+        depository: {
+          account_subtypes: ['checking', 'savings'],
+        },
+      },
       user: {
         client_user_id: String(userId),
       },
