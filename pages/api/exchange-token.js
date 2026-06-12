@@ -5,6 +5,7 @@ import { createPlaidSession, setPlaidSessionCookie } from '../../lib/plaid-sessi
 const handler = nextConnect();
 
 handler.post(async (req, res) => {
+  console.log('exchange-token body:', req.body);
   const { public_token } = req.body;
 
   if (!public_token) {
@@ -26,8 +27,18 @@ handler.post(async (req, res) => {
       item_id: response.data.item_id,
     });
   } catch (error) {
+    console.error(
+      'exchange-token error:',
+      error.response?.data || error.message || error
+    );
     return res.status(500).json(getPlaidError(error));
   }
 });
 
 export default handler;
+
+export const config = {
+  api: {
+    bodyParser: true,
+  },
+};
